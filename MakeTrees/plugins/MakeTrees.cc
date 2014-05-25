@@ -95,6 +95,8 @@ class L1Object {
     int nNonIsoEG;
     int nMET;
     int nMHT;
+
+    int passes_Jet_Met_trigger;
      
     float ptMuon[MAX_OBJECT];
     float etMuon[MAX_OBJECT];
@@ -308,6 +310,32 @@ MakeTrees::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
     L1Event.etaMHT[j] = MHT[j]->eta();
   }
 
+
+
+
+  //An easy toy-jet-met trigger
+  float jet_threshold = 50.0;
+  float met_threshold = 100.0;
+
+  bool isValidJet = false;
+  bool isValidMET = false;
+
+  for(size_t j = 0; j < JetCentral.size(); ++j) {
+    if(JetCentral[j]->pt() > jet_threshold) {
+      isValidJet = true;
+      break;
+    }
+  }
+  for(size_t j = 0; j < MET.size(); ++j) {
+    if(MET[j]->pt() > met_threshold) {
+      isValidMET = true;
+      break;
+    }
+  }
+  
+  if(isValidJet && isValidMET) L1Event.passes_Jet_Met_trigger = 1;
+
+
   outputTree->Fill();
 
 }
@@ -380,6 +408,7 @@ void MakeTrees::setBranches() {
   outputTree->Branch("nNonIsoEG",&L1Event.nNonIsoEG,"nNonIsoEG/I");
   outputTree->Branch("nMET",&L1Event.nMET,"nMET/I");
   outputTree->Branch("nMHT",&L1Event.nMHT,"nMHT/I");
+  outputTree->Branch("passes_Jet_Met_trigger", &L1Event.passes_Jet_Met_trigger, "passes_Jet_Met_trigger/I");
 
   outputTree->Branch("ptMuon", L1Event.ptMuon, "ptMuon[nMuon]/F");
   outputTree->Branch("etMuon", L1Event.etMuon, "etMuon[nMuon]/F");
@@ -434,6 +463,7 @@ void L1Object::reset() {
   nNonIsoEG = 0;
   nMET = 0;
   nMHT = 0;
+  passes_Jet_Met_trigger = 0;
 
   for(size_t j = 0; j < MAX_OBJECT; ++j) {
 
