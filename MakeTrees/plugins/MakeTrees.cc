@@ -58,6 +58,7 @@ class MakeTrees : public edm::EDAnalyzer {
 
       static void fillDescriptions(edm::ConfigurationDescriptions& descriptions);
       std::vector<const reco::Candidate*> getCollections(const edm::Event&, edm::InputTag);
+      int MatchingJets(std::vector<const reco::Candidate*>, std::vector<const reco::Candidate*>, float);
 
    private:
       virtual void beginJob() override;
@@ -66,7 +67,7 @@ class MakeTrees : public edm::EDAnalyzer {
 
       void setBranches();
 
-
+        
       virtual void beginRun(edm::Run const&, edm::EventSetup const&) override;
       //virtual void endRun(edm::Run const&, edm::EventSetup const&) override;
       //virtual void beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
@@ -74,6 +75,7 @@ class MakeTrees : public edm::EDAnalyzer {
 
       // ----------member data ---------------------------
       TTree *outputTree;
+      bool doReco;
 };
 //====================End of Main class========================//
 
@@ -95,9 +97,12 @@ class L1Object {
     int nNonIsoEG;
     int nMET;
     int nMHT;
+    int nPFJet;
 
     int passes_Jet_Met_trigger;
-     
+    int match_L1Jet_Reco; 
+    float matched_pt; 
+
     float ptMuon[MAX_OBJECT];
     float etMuon[MAX_OBJECT];
     float phiMuon[MAX_OBJECT];
@@ -112,6 +117,11 @@ class L1Object {
     float etForwardJet[MAX_OBJECT];
     float phiForwardJet[MAX_OBJECT];
     float etaForwardJet[MAX_OBJECT];
+    
+    float ptPFJet[MAX_OBJECT];
+    float etPFJet[MAX_OBJECT];
+    float phiPFJet[MAX_OBJECT];
+    float etaPFJet[MAX_OBJECT];
   
     float ptTau[MAX_OBJECT];
     float etTau[MAX_OBJECT];
@@ -158,7 +168,7 @@ MakeTrees::MakeTrees(const edm::ParameterSet& iConfig)
 
 {
    //now do what ever initialization is needed
-  //outputFileName = iConfig.getParameter<std::string>("outputFileName");
+  doReco = iConfig.getParameter<bool>("doReco");
 
 }
 
@@ -201,6 +211,24 @@ std::vector<const reco::Candidate*> MakeTrees::getCollections(const edm::Event& 
 
 
 
+int MakeTrees::MatchingJets(std::vector<const reco::Candidate*> l1, std::vector<const reco::Candidate*> reco, float DRMax) {
+
+  //Assuming jets are ordered by pt
+  for(size_t j = 0; j < l1.size(); ++j) {
+    for(size_t i = 0; i < reco.size(); ++i) {
+      float DeltaPhi = l1[j]->phi()-reco[j]->phi();
+      float DeltaEta = l1[j]->eta()-reco[j]->eta();
+      if(sqrt(DeltaPhi*DeltaPhi + DeltaEta*DeltaEta) < DRMax) return i;
+    }
+  }
+  return -1;
+
+}
+
+
+bool ptSort(const reco::Candidate * i, const reco::Candidate * j) { return i->pt() > j->pt(); }
+
+
 // ------------ method called for each event  ------------
 void
 MakeTrees::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
@@ -229,7 +257,7 @@ MakeTrees::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   L1Event.reset();
 
-  
+
   //JetCentral loop  
   std::cout << "Jet Central: " << JetCentral.size() << std::endl; 
   L1Event.nCentralJet = JetCentral.size();
@@ -336,6 +364,44 @@ MakeTrees::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
   if(isValidJet && isValidMET) L1Event.passes_Jet_Met_trigger = 1;
 
 
+
+  //Now we get PFRecoJets
+  if(doReco) {
+   
+    edm::InputTag tagPFJets("ak5PFJets", "");
+    std::vector<const reco::Candidate*> PFJets = getCollections(iEvent, tagPFJets);
+    std::vector<const reco::Candidate*> L1Jets;
+
+    std::sort(PFJets.begin(), PFJets.end(), ptSort);
+
+    //PfJet loop  
+    L1Event.nPFJet = PFJets.size();
+    for(size_t j = 0; j < PFJets.size(); ++j) {
+      L1Event.ptPFJet[j] = PFJets[j]->pt();
+      L1Event.etPFJet[j] = PFJets[j]->et();
+      L1Event.phiPFJet[j] = PFJets[j]->phi();
+      L1Event.etaPFJet[j] = PFJets[j]->eta();
+    }
+
+    float threshold = 50.0;
+    for(size_t j = 0; j < JetCentral.size(); ++j) {
+      if(JetCentral[j]->pt() > threshold) L1Jets.push_back(JetCentral[j]);
+    }
+    for(size_t j = 0; j < JetForward.size(); ++j) {
+      if(JetForward[j]->pt() > threshold) L1Jets.push_back(JetForward[j]);
+    }
+
+    int jetIndex = MatchingJets(L1Jets, PFJets, 0.5);
+    if(jetIndex == -1) {
+      L1Event.match_L1Jet_Reco = 0;
+      if(PFJets.size() > 0 ) L1Event.matched_pt = PFJets[0]->pt();
+    } else {
+      L1Event.match_L1Jet_Reco = 1;
+      L1Event.matched_pt = PFJets[jetIndex]->pt();
+    }
+  
+  }
+
   outputTree->Fill();
 
 }
@@ -408,7 +474,11 @@ void MakeTrees::setBranches() {
   outputTree->Branch("nNonIsoEG",&L1Event.nNonIsoEG,"nNonIsoEG/I");
   outputTree->Branch("nMET",&L1Event.nMET,"nMET/I");
   outputTree->Branch("nMHT",&L1Event.nMHT,"nMHT/I");
+  outputTree->Branch("nPFJet",&L1Event.nPFJet,"nPFJet/I");
+
   outputTree->Branch("passes_Jet_Met_trigger", &L1Event.passes_Jet_Met_trigger, "passes_Jet_Met_trigger/I");
+  outputTree->Branch("match_L1Jet_Reco", &L1Event.match_L1Jet_Reco, "match_L1Jet_Reco/I");
+  outputTree->Branch("matched_pt", &L1Event.matched_pt, "matched_pt/F");
 
   outputTree->Branch("ptMuon", L1Event.ptMuon, "ptMuon[nMuon]/F");
   outputTree->Branch("etMuon", L1Event.etMuon, "etMuon[nMuon]/F");
@@ -424,6 +494,11 @@ void MakeTrees::setBranches() {
   outputTree->Branch("etForwardJet", L1Event.etForwardJet, "etForwardJet[nForwardJet]/F");
   outputTree->Branch("phiForwardJet", L1Event.phiForwardJet, "phiForwardJet[nForwardJet]/F");
   outputTree->Branch("etaForwardJet", L1Event.etaForwardJet, "etaForwardJet[nForwardJet]/F");
+  
+  outputTree->Branch("ptPFJet", L1Event.ptPFJet, "ptPFJet[nPFJet]/F");
+  outputTree->Branch("etPFJet", L1Event.etPFJet, "etPFJet[nPFJet]/F");
+  outputTree->Branch("phiPFJet", L1Event.phiPFJet, "phiPFJet[nPFJet]/F");
+  outputTree->Branch("etaPFJet", L1Event.etaPFJet, "etaPFJet[nPFJet]/F");
 
   outputTree->Branch("ptTau", L1Event.ptTau, "ptTau[nTau]/F");
   outputTree->Branch("etTau", L1Event.etTau, "etTau[nTau]/F");
@@ -464,7 +539,9 @@ void L1Object::reset() {
   nMET = 0;
   nMHT = 0;
   passes_Jet_Met_trigger = 0;
-
+  match_L1Jet_Reco = 0;
+  matched_pt = 0;
+  
   for(size_t j = 0; j < MAX_OBJECT; ++j) {
 
     ptMuon[j] = 0;
@@ -481,6 +558,11 @@ void L1Object::reset() {
     etForwardJet[j] = 0;
     phiForwardJet[j] = 0;
     etaForwardJet[j] = 0;
+    
+    ptPFJet[j] = 0;
+    etPFJet[j] = 0;
+    phiPFJet[j] = 0;
+    etaPFJet[j] = 0;
 
     ptTau[j] = 0;
     etTau[j] = 0;

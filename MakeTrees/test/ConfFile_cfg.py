@@ -6,9 +6,9 @@ process.load("FWCore.MessageService.MessageLogger_cfi")
 
 process.load("L1Tutorial.MakeTrees.CfiFile_cfi")
 
-process.demo.outputFileName = cms.string("tree.root")
+process.demo.doReco = cms.bool(False)
 
-process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(100) )
+process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(-1) )
 
 process.GlobalTag = cms.ESSource( "PoolDBESSource",
     globaltag = cms.string( "GR_H_V33::All" ),
@@ -42,7 +42,11 @@ process.TFileService = cms.Service("TFileService",
 process.source = cms.Source("PoolSource",
     # replace 'myfile.root' with the source file you want to use
     fileNames = cms.untracked.vstring(
-        'file:/shome/pablom/L1Trigger/CMSSW_7_0_0_pre9/src/L1Analyzer/CheckEfficiency/test/out.root'
+        'file:/shome/pablom/L1Trigger/startingFromScrach/CMSSW_7_0_0_pre9/src/L1Trigger/UCT2015/test/out.root'
+        #'file:/shome/pablom/L1Trigger/startingFromScrach/CMSSW_7_0_0_pre9/src/L1Trigger/UCT2015/test/out1.root',
+        #'file:/shome/pablom/L1Trigger/startingFromScrach/CMSSW_7_0_0_pre9/src/L1Trigger/UCT2015/test/out2.root',
+        #'file:/shome/pablom/L1Trigger/startingFromScrach/CMSSW_7_0_0_pre9/src/L1Trigger/UCT2015/test/out3.root'
+    
     )
 )
 
